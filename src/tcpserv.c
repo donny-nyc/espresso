@@ -47,8 +47,8 @@ int before_start_hook(int argc, char **argv) {
 	return 0;
 }
 
-int build_http_200_header(char *header_buf, size_t buf_size, size_t body_len) {
-	const char *header_format_string = "HTTP/2.0 200 OK\r\n\
+int build_http_header(char *header_buf, unsigned int status, size_t buf_size, size_t body_len) {
+	const char *header_format_string = "HTTP/2.0 %d %s\r\n\
 server: caffeine.d\r\n\
 date: %s\r\n\
 content-type: text/html; charset=UTF-8\r\n\
@@ -74,12 +74,12 @@ content-length: %d\r\n\
 		return 1;
 	}
 
-	snprintf(header_buf, buf_size, header_format_string, current_date, body_len +2);
+	snprintf(header_buf, buf_size, header_format_string, status, status == 200 ? "OK" : "NOT FOUND", current_date, body_len +2);
 
 	return 0;
 }
 
-int build_response_body(char *buffer, size_t max_len, char *path) {
+int build_response_body(int body_fd, char *buffer, size_t max_len) {
 	int body_fd;
 
 	char p_buff[1000];
@@ -121,6 +121,8 @@ int parse_request(char *request, char *path, size_t r_len, size_t p_len) {
 }
 
 void str_echo(int sockfd) {
+	unsigned int status = 200;
+
 	char request_buffer[10000];
 	ssize_t n;
 	read(sockfd, request_buffer, sizeof(request_buffer));
@@ -132,12 +134,18 @@ void str_echo(int sockfd) {
 
 	printf("path_buffer: %s\n", path_buffer);
 
-	build_response_body(body, sizeof(body), path_buffer);
+	int body_fd;
+	if((body_fd = open(path_buffer, O_RDONLY)) == -1) { /* 404 Not Found */
+		status = 404;
+		body_fd = open("public/404.html", O_RDONLY);
+	}
+
+	build_response_body(body_fd, body, sizeof(body));
 
 	char header_buf[1000];
-	if(build_http_200_header(header_buf, sizeof(header_buf), strlen(body)) == -1) {
-		perror("build_http_200_header");
-		exit(1);
+	if(build_http_header(header_buf, status, sizeof(header_buf), strlen(body)) == -1) {
+				perror("build_http_header");
+				exit(1);
 	}
 
 	if((write(sockfd, header_buf, strlen(header_buf))) == -1) {
