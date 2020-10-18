@@ -79,24 +79,60 @@ content-length: %d\r\n\
 	return 0;
 }
 
-int build_response_body(char *buffer, size_t max_len) {
+int build_response_body(char *buffer, size_t max_len, char *path) {
 	int body_fd;
 
-	if((body_fd = open("index.html", O_RDONLY)) == -1) {
+	char p_buff[1000];
+
+	snprintf(p_buff, sizeof(p_buff), "public%s", path);
+
+	printf("GET: %s\n", path);
+
+	if((body_fd = open(p_buff, O_RDONLY)) == -1) {
 		perror(strerror(errno));
 		return 1;
 	}
 
 	read(body_fd, buffer, max_len);
 
+
 	close(body_fd);
 	return 0;
 }
 
+int parse_request(char *request, char *path, size_t r_len, size_t p_len) {
+	char *context;
+	const char delim = ' ';
+	char *result = strtok_r(request, &delim, &context);
+	char *token;
+
+	switch(hash(result)) {
+		case 193456677: /* GET */
+			token = strtok_r(NULL, &delim, &context);
+			printf("Found %s\n", token);
+			strncpy(path, token, p_len);
+			break;
+		default:
+			printf("Found %ld\n", hash(result));
+			break;
+	}
+
+	return 0;
+}
+
 void str_echo(int sockfd) {
+	char request_buffer[10000];
+	ssize_t n;
+	read(sockfd, request_buffer, sizeof(request_buffer));
+
+	char path_buffer[10000];
+	parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
+
 	char body[10000];
 
-	build_response_body(body, sizeof(body));
+	printf("path_buffer: %s\n", path_buffer);
+
+	build_response_body(body, sizeof(body), path_buffer);
 
 	char header_buf[1000];
 	if(build_http_200_header(header_buf, sizeof(header_buf), strlen(body)) == -1) {
