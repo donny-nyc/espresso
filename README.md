@@ -16,4 +16,7 @@ To justify purchasing [Unix Network Programming, Volume 1](https://www.goodreads
 
 Which I bought to justify purchasing an enterprise-grade [HPE BladeSystem](https://buy.hpe.com/us/en/options/enclosures-chassis/bladesystem-c-class-enclosures/bladesystem-c-class-enclosures/hpe-bladesystem-c3000-enclosures/p/3540808).
 
-Because, covid?
+Which I bought and had shipped by freight because, covid?
+(Have fun finding a loading dock in the middle of a pandemic)
+
+Talk to your doctor. Next question.
