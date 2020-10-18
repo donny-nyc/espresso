@@ -121,7 +121,16 @@ void str_echo(int sockfd) {
 
 	char path[10000];
 
-	snprintf(path, sizeof(path), "public%s", path_buffer);
+	char *prefix = "public";
+	char *root = "public/";
+	snprintf(path, sizeof(path), "%s%s", prefix, path_buffer);
+
+	// given an empty path, just return the index
+	if (strncmp(path, root, strlen(path)) == 0) {
+		bzero(path, sizeof(path));
+		strcpy(path, "public/index.html");
+		printf("%s <=> %s\n", path, root);
+	} 
 
 	char body[10000];
 
