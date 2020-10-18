@@ -80,18 +80,7 @@ content-length: %d\r\n\
 }
 
 int build_response_body(int body_fd, char *buffer, size_t max_len) {
-	int body_fd;
-
 	char p_buff[1000];
-
-	snprintf(p_buff, sizeof(p_buff), "public%s", path);
-
-	printf("GET: %s\n", path);
-
-	if((body_fd = open(p_buff, O_RDONLY)) == -1) {
-		perror(strerror(errno));
-		return 1;
-	}
 
 	read(body_fd, buffer, max_len);
 
@@ -130,14 +119,21 @@ void str_echo(int sockfd) {
 	char path_buffer[10000];
 	parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
 
+	char path[10000];
+
+	snprintf(path, sizeof(path), "public%s", path_buffer);
+
 	char body[10000];
 
-	printf("path_buffer: %s\n", path_buffer);
+	printf("path: %s\n", path);
 
 	int body_fd;
-	if((body_fd = open(path_buffer, O_RDONLY)) == -1) { /* 404 Not Found */
+	if((body_fd = open(path, O_RDONLY)) == -1) { /* 404 Not Found */
 		status = 404;
-		body_fd = open("public/404.html", O_RDONLY);
+		if( (body_fd = open("public/404.html", O_RDONLY)) == -1) {
+				perror(strerror(errno));
+				exit(1);
+		}
 	}
 
 	build_response_body(body_fd, body, sizeof(body));
