@@ -1,3 +1,5 @@
+#include "stories.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -173,6 +175,15 @@ int main(int argc, char **argv) {
 		perror("There was a problem starting the script.\n");
 		exit(1);
 	}
+
+	//story_t buf[5];
+	//size_t stories_read = read_stories_to_buf(buf, sizeof(buf));
+	//printf("%ld stories read.\n", stories_read);
+
+	//printf("%s\n\n%s", buf[0].title, buf[0].body);
+	size_t r = build_response(NULL, 0);
+
+	return 0;
 
 	// <netinet/in.h>
 	// Structure describing an Internet socket address
