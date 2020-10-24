@@ -22,18 +22,21 @@ typedef struct tag tag_t;
 #define DEBUG 				1
 	
 
-#define SCANNING 					0
-#define OPEN_BRACKET 			1
-#define OPEN_BRACKET_NAME	2
-#define OPEN_BRACKET_ATTR	3
-#define CLOSE_BRACKET 		4
-#define OPEN_TAG					5
-#define CLOSE_TAG 				6
-#define OVERRUN 					7
-#define STOP				  		8
+#define SCANNING 								0
+#define OPEN_BRACKET 						1
+#define OPEN_BRACKET_NAME				2
+#define OPEN_BRACKET_ATTR				3
+#define OPEN_BRACKET_WHITESPACE	4
+#define CLOSE_BRACKET 					5
+#define OPEN_TAG								6
+#define CLOSE_TAG 							7
+#define OVERRUN 								8
+#define STOP				  					9
 
 #define VALID							0
 #define INVALID						1
+
+#define MAX_ATTR 				100
 
 /*
  * ->(start) [SCANNING]
@@ -102,7 +105,14 @@ int main(int argc, char **argv) {
 			case OPEN_BRACKET:
 				new_tag = (tag_t *)malloc(sizeof(tag_t));
 
-				state = OPEN_BRACKET_NAME;
+				switch (candidate[idx]) {
+					case ' ': /* consume leading whitespace */
+						idx++;
+						break;
+					default:
+					state = OPEN_BRACKET_NAME;
+					break;
+				};
 				break;
 			case OPEN_BRACKET_NAME:
 				switch (candidate[idx]) {
@@ -125,7 +135,7 @@ int main(int argc, char **argv) {
 						bzero(buffer, ARG_MAX * sizeof(char));
 						b_idx = 0;
 
-						state = OPEN_BRACKET_ATTR;
+						state = OPEN_BRACKET_WHITESPACE;
 						break;
 					default:
 						buffer[b_idx++] = candidate[idx];
@@ -133,7 +143,25 @@ int main(int argc, char **argv) {
 						break;
 				}
 				break;
+			case OPEN_BRACKET_WHITESPACE:
+				switch (candidate[idx]) {
+					case ' ':
+						idx++;
+						break;
+					case '>':
+						state = CLOSE_BRACKET;
+						break;
+					default: /* anything else that is read, assume to be an attr */
+						state = OPEN_BRACKET_ATTR;
+						break;
+				}
+				break;
 			case OPEN_BRACKET_ATTR:
+				// prepare storage for new attribute
+				if (!new_attr) {
+					new_attr = (attribute_t *)malloc(sizeof(attribute_t));
+					bzero(new_attr, sizeof(attribute_t));
+				}
 				switch (candidate[idx]) {
 					/* attr are separated by spaces, but should also
 					 * end once the tag closes - ie a right-square bracket
@@ -165,7 +193,7 @@ int main(int argc, char **argv) {
 							b_idx = 0;
 
 							if (!new_tag->attributes) {
-								new_tag->attributes = (attribute_t **)malloc(sizeof(attribute_t *));
+								new_tag->attributes = (attribute_t **)malloc(MAX_ATTR * sizeof(attribute_t *));
 							}
 
 							new_tag->attributes[attr_i++] = new_attr;
@@ -175,7 +203,7 @@ int main(int argc, char **argv) {
 												until something meaningful is read */
 						}
 
-						idx++;
+						state = OPEN_BRACKET_WHITESPACE;
 						break;
 					case '=':
 						attr_len = strlen(buffer);
@@ -190,12 +218,6 @@ int main(int argc, char **argv) {
 						idx++;
 						break;
 					default:
-						// prepare storage for new attribute
-						if (!new_attr) {
-							new_attr = (attribute_t *)malloc(sizeof(attribute_t));
-							bzero(new_attr, sizeof(attribute_t));
-						}
-
 						/* read a continuous stream of input until we've reached
 						 * the end of the value (marked by whitespace, an equals sign
 						 * or a right-angle bracket
@@ -209,7 +231,7 @@ int main(int argc, char **argv) {
 				if(DEBUG) {
 					printf("result => %s\n", new_tag->name);
 					for (int a = 0; a < attr_i; a++) {
-						printf("attr-> %s\n", new_tag->attributes[a]->name);	
+						printf("attr[%d]-> %s\n", a, new_tag->attributes[a]->name);	
 						if(new_tag->attributes[a]->value) {
 							printf("value-> %s\n", new_tag->attributes[a]->value);
 						}
