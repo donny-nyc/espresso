@@ -134,7 +134,12 @@ void str_echo(int sockfd) {
 		printf("%s <=> %s\n", path, root);
 	} 
 
-	char body[10000];
+	// char body[10000];
+	// We're getting prolific - 10kb should have been enough for anybody,,
+	// but we just had to have more...
+	//
+	// Should make this configurable
+	char body[100000];
 
 	printf("path: %s\n", path);
 
