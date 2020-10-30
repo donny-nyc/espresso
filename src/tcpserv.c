@@ -8,9 +8,12 @@
 #include <strings.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
+#include <wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 
 unsigned int SERV_PORT 	= 9090;
@@ -171,24 +174,46 @@ void str_echo(int sockfd) {
 	}
 }
 
+static void
+sigchldHandler(int sig) {
+	int status, savedErrno;
+	pid_t childPid;
+
+	savedErrno = errno;
+
+	while ((childPid = waitpid(-1, &status, WNOHANG)) > 0) {
+		printf("%d handler reaped child %d - ", sig, childPid);
+	}
+
+	if (childPid == -1 && errno != ECHILD) {
+		perror(strerror(errno));
+	}
+
+	errno = savedErrno;
+}
+
 int main(int argc, char **argv) {
 	int listenfd, connfd;
 	pid_t childpid;
 	socklen_t clilen;
+
+	struct sigaction sa;
+
+	sigemptyset(&sa.sa_mask);
+
+	sa.sa_flags = SA_RESTART;
+	sa.sa_handler = sigchldHandler;
+
+	if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+		perror("sigaction");
+		exit(1);
+	}
 
 	if( before_start_hook(argc, argv) != 0) {
 		perror("There was a problem starting the script.\n");
 		exit(1);
 	}
 
-	//story_t buf[5];
-	//size_t stories_read = read_stories_to_buf(buf, sizeof(buf));
-	//printf("%ld stories read.\n", stories_read);
-
-	//printf("%s\n\n%s", buf[0].title, buf[0].body);
-	size_t r = build_response(NULL, 0);
-
-	return 0;
 
 	// <netinet/in.h>
 	// Structure describing an Internet socket address
