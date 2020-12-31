@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
-unsigned int SERV_PORT 	= 9090;
+unsigned int SERV_PORT 	= 80;
 unsigned int LISTEN_Q  	= 100;
 unsigned int MAXLINE 		= 10000;
 
@@ -121,21 +121,24 @@ void str_echo(int sockfd) {
 	ssize_t n;
 	read(sockfd, request_buffer, sizeof(request_buffer));
 
-	char path_buffer[10000];
-	parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
+	//char path_buffer[10000];
+	//parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
 
-	char path[10000];
+	// char path[10000];
+	char *path = "/home/espresso/public/index.html";
 
-	char *prefix = "public";
-	char *root = "public/";
-	snprintf(path, sizeof(path), "%s%s", prefix, path_buffer);
+	// char *prefix = "public";
+	// char *root = "public/";
+	// snprintf(path, sizeof(path), "%s%s", prefix, path_buffer);
 
 	// given an empty path, just return the index
+	/*
 	if (strncmp(path, root, strlen(path)) == 0) {
 		bzero(path, sizeof(path));
 		strcpy(path, "public/index.html");
 		printf("%s <=> %s\n", path, root);
 	} 
+	*/
 
 	// char body[10000];
 	// We're getting prolific - 10kb should have been enough for anybody,,
