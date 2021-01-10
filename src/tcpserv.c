@@ -1,5 +1,6 @@
 #include "stories.h"
 
+#include <syslog.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -19,6 +20,21 @@
 unsigned int SERV_PORT 	= 80;
 unsigned int LISTEN_Q  	= 100;
 unsigned int MAXLINE 		= 10000;
+
+struct favicon {
+	char *path;
+	size_t size;
+	char *buffer;
+} favicon;
+
+struct page {
+	char *path;
+	size_t size;
+	char *buffer;
+};
+
+typedef struct page page_t;
+typedef struct favicon favicon_t;
 
 void print_usage() {
 	printf("usage: ./a.out [-p listen port number]\n");
@@ -52,15 +68,7 @@ int before_start_hook(int argc, char **argv) {
 	return 0;
 }
 
-int build_http_header(char *header_buf, unsigned int status, size_t buf_size, size_t body_len) {
-	const char *header_format_string = "HTTP/2.0 %d %s\r\n\
-server: caffeine.d\r\n\
-date: %s\r\n\
-content-type: text/html; charset=UTF-8\r\n\
-content-length: %d\r\n\
-\r\n\
-\r\n";
-
+int build_http_header(char *header_buf, const char *header_format_string, unsigned int status, size_t buf_size, size_t body_len, char *content_type) {
 	char current_date[1000];
 
 	time_t t;
@@ -79,19 +87,148 @@ content-length: %d\r\n\
 		return 1;
 	}
 
-	snprintf(header_buf, buf_size, header_format_string, status, status == 200 ? "OK" : "NOT FOUND", current_date, body_len +2);
+	snprintf(header_buf, buf_size, header_format_string, status, status == 200 ? "OK" : "NOT FOUND", current_date, content_type, body_len);
 
 	return 0;
 }
 
-int build_response_body(int body_fd, char *buffer, size_t max_len) {
-	char p_buff[1000];
+int build_200_ok(char *header_buf, size_t buf_size, size_t body_len, char *content_type) {
+	const char *format_string = "HTTP/2.0 %d %s\r\n\
+server: espresso\r\n\
+date: %s\r\n\
+content-type: %s\r\n\
+content-length: %d\r\n\
+\r\n";
 
-	read(body_fd, buffer, max_len);
+	return build_http_header(header_buf, format_string, 200, buf_size, body_len, content_type);
+}
 
+int build_404_not_found(char *header_buf, size_t buf_size, size_t body_len) {
+	char *content_type = "text/html; charset=UTF-8";
+	const char *format_string = "HTTP/2.0 %d %s\r\n\
+server: espresso\r\n\
+date: %s\r\n\
+content-type: %s\r\n\
+content-length: %d\r\n\
+\r\n";
 
-	close(body_fd);
-	return 0;
+	return build_http_header(header_buf, format_string, 404, buf_size, body_len, content_type);
+}
+
+int build_301_redirect(char *header_buf, size_t buf_size, size_t body_len) {
+	char *content_type = "text/html; charset=UTF-8";
+	const char *format_string = "HTTP/2.0 %d %s\r\n\
+location: http://104.131.30.208/\r\n\
+server: espresso\r\n\
+date: %s\r\n\
+content-type: %s\r\n\
+content-length: %d\r\n\
+\r\n";
+
+	return build_http_header(header_buf, format_string, 301, buf_size, body_len, content_type);
+}
+
+size_t load_favicon(char *path) {
+	FILE *fp;
+	long lSize;
+	size_t result;
+
+	fp = fopen(path, "r");
+	if (fp == NULL) {
+		syslog(LOG_ERR, "failed to open %s", path);
+		return 0;
+	}
+
+	// sort out the file size
+	fseek(fp, 0, SEEK_END);
+	lSize = ftell(fp);
+	rewind(fp); // equivalent to fseek(stream, 0L, SEEK_SET);
+	syslog(LOG_INFO, "reading %ld bytes from %s", lSize, path);
+
+	// prepare a buffer for the file
+	favicon.buffer  = (char *)malloc(sizeof(char) * lSize);
+	if (favicon.buffer == NULL) {
+		syslog(LOG_ERR, "failed to allocate buffer for %s", path);
+		return 0;
+	}
+
+	// copy the file to the buffer
+	result = fread((void *)favicon.buffer, sizeof(char), lSize, fp);
+	if (result != lSize) {
+		syslog(LOG_ERR, "Failed to read the file from %s", path);
+		return 0;
+	}
+	syslog(LOG_INFO, "read %ld bytes into buffer", result);
+
+	syslog(LOG_INFO, "load file (%s): %s", path, favicon.buffer);
+	syslog(LOG_INFO, "result: %ld", result);
+
+	favicon.path = (char *)malloc(sizeof(char) * strlen(path));
+	strcpy(favicon.path, path);
+	favicon.size = result;
+
+	return result;
+}
+
+page_t *load_page_to_buffer(char *path) {
+	FILE *fp;
+	long lSize;
+	char *buffer;
+	size_t result;
+
+	fp = fopen(path, "r");
+	if (fp == NULL) {
+		syslog(LOG_ERR, "failed to open %s", path);
+		return NULL;
+	}
+
+	// sort out the file size
+	fseek(fp, 0, SEEK_END);
+	lSize = ftell(fp);
+	rewind(fp);
+
+	syslog(LOG_INFO, "reading %ld bytes from %s", lSize, path);
+
+	// prepare buffer for the file
+	buffer = (char *)malloc(sizeof(char) * lSize);
+	if (buffer == NULL) {
+		syslog(LOG_ERR, "failed to allocate buffer for %s", path);
+		return NULL;
+	}
+
+	// copy the file to the buffer
+	result = fread((void *) buffer, 1, lSize, fp);
+	if (result != lSize) {
+		syslog(LOG_ERR, "failed to read file from %s", path);
+		free(buffer);
+		return NULL;
+	}
+	syslog(LOG_INFO, "read %ld bytes from %s", result, path);
+	syslog(LOG_INFO, "%s", buffer);
+
+	// prepare the page struct
+	page_t *page = (page_t *)malloc(sizeof(page_t));
+	if (page == NULL) {
+		syslog(LOG_ERR, "failed to allocate page for %s", path);
+		free(buffer);
+		return NULL;
+	}
+
+	page->path = (char *)malloc(sizeof(char) * strlen(path));
+	if (page->path == NULL) {
+		syslog(LOG_ERR, "failed to write path %s", path);
+		free(buffer);
+		free(page);
+		return NULL;
+	}
+
+	strcpy(page->path, path);
+	page->buffer = buffer;
+	page->size = result;
+
+	syslog(LOG_INFO, "page->buffer [%lu]: %s", page->size, page->buffer);
+
+	return page;
 }
 
 int parse_request(char *request, char *path, size_t r_len, size_t p_len) {
@@ -99,6 +236,8 @@ int parse_request(char *request, char *path, size_t r_len, size_t p_len) {
 	const char delim = ' ';
 	char *result = strtok_r(request, &delim, &context);
 	char *token;
+
+	syslog(LOG_INFO, "parse_request: %s", path);
 
 	switch(hash(result)) {
 		case 193456677: /* GET */
@@ -111,6 +250,8 @@ int parse_request(char *request, char *path, size_t r_len, size_t p_len) {
 			break;
 	}
 
+
+
 	return 0;
 }
 
@@ -118,63 +259,83 @@ void str_echo(int sockfd) {
 	unsigned int status = 200;
 
 	char request_buffer[10000];
-	ssize_t n;
 	read(sockfd, request_buffer, sizeof(request_buffer));
 
-	//char path_buffer[10000];
-	//parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
+	char path_buffer[10000];
+	parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
 
-	// char path[10000];
-	char *path = "/home/espresso/public/index.html";
+	page_t *page;
+	char *body_buffer = NULL;
+	char *content_type = "text/html; charset=UTF-8";
+	size_t body_size = 0;
 
-	// char *prefix = "public";
-	// char *root = "public/";
-	// snprintf(path, sizeof(path), "%s%s", prefix, path_buffer);
-
-	// given an empty path, just return the index
-	/*
-	if (strncmp(path, root, strlen(path)) == 0) {
-		bzero(path, sizeof(path));
-		strcpy(path, "public/index.html");
-		printf("%s <=> %s\n", path, root);
-	} 
-	*/
-
-	// char body[10000];
-	// We're getting prolific - 10kb should have been enough for anybody,,
-	// but we just had to have more...
-	//
-	// Should make this configurable
-	char body[100000];
-
-	printf("path: %s\n", path);
-
-	int body_fd;
-	if((body_fd = open(path, O_RDONLY)) == -1) { /* 404 Not Found */
-		status = 404;
-		if( (body_fd = open("public/404.html", O_RDONLY)) == -1) {
-				perror(strerror(errno));
-				exit(1);
-		}
+	char *path;
+	syslog(LOG_INFO, "hash path [%lu] %s", hash(path_buffer), path_buffer);
+	switch(hash(path_buffer)) {
+	 case 12332232679284166093:
+		 syslog(LOG_INFO, "serving favicon");
+		 syslog(LOG_INFO, "%s", favicon.buffer);
+		 path = "/home/espresso/static/favicon.png";
+		 content_type = "image/png";
+		 body_buffer = favicon.buffer; // *shrug*
+		 body_size = favicon.size;
+		 syslog(LOG_INFO, "body_size %lu", favicon.size);
+		 break;
+	 case 177620:
+		 path = "/home/espresso/public/index.html";
+		 page = load_page_to_buffer(path);
+		 body_buffer = page->buffer;
+		 body_size = page->size;
+		 break;
+	 default:
+		 syslog(LOG_INFO, "hash %s [%lu]", path_buffer, hash(path_buffer));
+		 status = 301;
+		 path = "/home/espresso/public/index.html";
+		 page = load_page_to_buffer(path);
+		 body_buffer = page->buffer;
+		 body_size = page->size;
 	}
 
-	build_response_body(body_fd, body, sizeof(body));
+	syslog(LOG_INFO, "body buffer: %s", body_buffer);
+
+
+	syslog(LOG_INFO, "path: %s", path);
+	// build_response_body(body_fd, body, sizeof(body));
+
 
 	char header_buf[1000];
-	if(build_http_header(header_buf, status, sizeof(header_buf), strlen(body)) == -1) {
-				perror("build_http_header");
-				exit(1);
+	switch(status) {
+		case 200:
+			build_200_ok(header_buf, sizeof(header_buf), body_size, content_type);
+			break;
+		case 404:
+			build_404_not_found(header_buf, sizeof(header_buf), body_size);
+			break;
+		case 301:
+			build_301_redirect(header_buf, sizeof(header_buf), body_size);
+			break;
 	}
 
+	syslog(LOG_INFO, "write header");
+	syslog(LOG_INFO, "%s", header_buf);
 	if((write(sockfd, header_buf, strlen(header_buf))) == -1) {
-		perror(strerror(errno));
+		syslog(LOG_ERR, "failed to write header to stream");
+
 		exit(1);
 	}
 
-	if((write(sockfd, body, strlen(body))) == -1) {
-		perror(strerror(errno));
+	if((write(sockfd, body_buffer, body_size)) == -1) {
+		syslog(LOG_ERR, "failed to write body to stream");
 		exit(1);
 	}
+
+	if (page != NULL) {
+		free(body_buffer);
+		free(page->path);
+		free(page);
+	}
+
+	syslog(LOG_INFO, "request [%d] [%s] [%ld] %s", status, request_buffer, body_size, path_buffer);
 }
 
 static void
@@ -200,12 +361,22 @@ int main(int argc, char **argv) {
 	pid_t childpid;
 	socklen_t clilen;
 
+	char *path = "/home/espresso/static/favicon.png";
+	load_favicon(path);
+
+	syslog(LOG_INFO, "favicon.buffer %s", favicon.buffer);
+	syslog(LOG_INFO, "favicon.path %s", favicon.path);
+	syslog(LOG_INFO, "favicon.size %lu", favicon.size);
+
 	struct sigaction sa;
 
 	sigemptyset(&sa.sa_mask);
 
 	sa.sa_flags = SA_RESTART;
 	sa.sa_handler = sigchldHandler;
+
+	openlog("[espresso]", 0, 0);
+	syslog(LOG_INFO, "started");
 
 	if (sigaction(SIGCHLD, &sa, NULL) == -1) {
 		perror("sigaction");
@@ -238,6 +409,7 @@ int main(int argc, char **argv) {
 		perror(strerror(errno));
 		exit(1);
 	}
+	syslog(LOG_INFO, "listening on port %d", SERV_PORT);
 
 	//printf("bound to host on port %d\n", SERV_PORT);
 

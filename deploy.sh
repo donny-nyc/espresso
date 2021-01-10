@@ -1,4 +1,5 @@
 #!/bin/bash
+clear
 
 function bail() {
   echo -e "\e[0;31mBailing for Reasons:"
@@ -16,6 +17,7 @@ echo "   \___||___/ .__/|_|  \___||___/___/\___/ "
 echo "            | |                            "
 echo "            | | github.com/donny-nyc       "
 echo -ne "\e[0m"
+echo
 
 echo -ne "[ ] Build the server binary\\r"
 make server > build.log 2>&1
@@ -64,7 +66,7 @@ echo -ne "\e[0m"
 
 
 echo -ne "\e[0;37m[ ] Upload static files\\r"
-STATIC_STATUS=$(scp -i ~/.ssh/id_donny_nyc public/index.html root@104.131.30.208:/home/espresso/public/index.html 2>&1)
+STATIC_STATUS=$(scp -i ~/.ssh/id_donny_nyc public/index.html root@104.131.30.208:/home/espresso/public/index.html 2>&1; scp -i ~/.ssh/id_donny_nyc static/favicon.png root@104.131.30.208:/home/espresso/static/favicon.png 2>&1)
 if [ $? -ne 0 ]
 then
 	echo -e "\e[0;31m[!] Upload static files\\r"
@@ -77,12 +79,23 @@ echo -ne "\e[0m"
 
 echo -ne "\e[0;37m[ ] (re)Start the espresso service\\r"
 SERVICE_STATUS=$(ssh -i ~/.ssh/id_donny_nyc root@104.131.30.208 -C "systemctl restart espresso" 2>&1)
-if [ ! $? -eq 0 ]
+if [ $? -ne 0 ]
 then
   echo -e "\e[0;31m[!] (re)Start the espresso service"
-  echo -ne "\e[0m"
   bail "$SERVICE_STATUS"
 fi
-echo -ne "\e[0;32m[X] (re)Start the espresso service\\r"
+echo -e "\e[0;32m[X] (re)Start the espresso service"
+
+echo -ne "\e[0m"
+
+echo -ne "\e[0;37m[ ] espresso service ok\\r"
+ESPRESSO_STATUS=$(ssh -i ~/.ssh/id_donny_nyc root@104.131.30.208 -C "systemctl status espresso" 2>&1)
+if [ $? -ne 0 ]
+then
+	echo -e "\e[0;31m[!] espresso service ok"
+	bail "$ESPRESSO_STATUS"
+fi
+
+echo -e "\e[0;32m[X] espresso service ok"
 
 echo -ne "\e[0m"
