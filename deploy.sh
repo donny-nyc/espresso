@@ -53,7 +53,7 @@ then
 fi
 UPLOAD_STATUS=$(scp -i ~/.ssh/id_donny_nyc build/espresso root@104.131.30.208:/usr/local/bin/espresso 2>&1)
 
-if [ $? -eq 1 ]
+if [ $? -eq 1 ] && [ "$1" != "static" ]
 then
   echo -e "\e[0;31m[!] Upload the binary to benchmark.nyc"
   echo "    !! Could not upload binary !!"
@@ -76,6 +76,9 @@ echo -e "\e[0;32m[X] Upload static files\\r"
 echo -ne "\e[0m"
 
 
+if [ "$1" == "static" ]; then
+	exit 0
+fi
 
 echo -ne "\e[0;37m[ ] (re)Start the espresso service\\r"
 SERVICE_STATUS=$(ssh -i ~/.ssh/id_donny_nyc root@104.131.30.208 -C "systemctl restart espresso" 2>&1)

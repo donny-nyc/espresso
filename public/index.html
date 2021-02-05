@@ -2,20 +2,102 @@
 	<head>
 		<link rel="icon" type="image/png" href="favicon.png" />
 		<title>Benchmark Coffee Roasters</title>
+		<style>
+			.row-1 {
+				width: 100%;
+				height: 25%;
+				min-height: 150px;
+				background-color: blue;
+			}
+
+			.row-2 {
+				height: 50%;
+				min-height: 300px;
+				background-color: #AAF;
+			}
+
+			.col-1 {
+				width: 33%;
+				height: 100%;
+			}
+
+			.col-3 {
+				width: 99%;
+				height: 100%;
+			}
+
+			.centered {
+				margin-left: auto;
+				margin-right: auto;
+			}
+
+			.fade-in {
+				animation: fadeIn ease 1.0s;
+				-webkit-animation: fadeIn ease 1.0s;
+				-moz-animation: fadeIn ease 1.0s;
+				-o-animation: fadeIn ease 1.0s;
+				-ms-animation: fadeIn ease 1.0s;
+			}
+
+			@keyframes fadeIn {
+				0% {opacity:0;}
+				100% {opacity:1;}
+			}
+
+			@-moz-keyframes fadeIn {
+				0% {opacity:0;}
+				100% {opacity:1;}
+			}
+
+			@-webkit-keyframes fadeIn {
+				0% {opacity:0;}
+				100% {opacity:1;}
+			}
+
+			@-o-keyframes fadeIn {
+				0% {opacity:0;}
+				100% {opacity:1;}
+			}
+
+			@-ms-keyframes fadeIn {
+				0% {opacity:0;}
+				100% {opacity:1;}
+			}
+
+		</style>
 	</head>
 	<body>
 		<div id='main'>
-			<div id='header'>
-				<h1>Hello World!</h1>
+			<div class='fade-in centered col-3'>
+				<div class='row-1'>
+					<img src="benchmark.png" />
+				</div>
+				<div class='row-2'>
+					<div class='row-2'>
+						<div><p>1</p></div>
+					</div>
+					<div class='row-1'>
+						<div><p>2</p></div>
+					</div>
+
+					<div class='row-1'>
+						<div><p>3</p></div>
+					</div>
+				</div>
+				<div class='row-1'>
+					<p>Powered by <a href="https://github.com/donny-nyc/espresso">espresso</a></p>
+					<p class='email'><a href='mailto:mail@donny.nyc'>mail@donny.nyc</a></p>
+
+					<p class='copyright'>Copyright Benchmark Coffee Roasters &#169; <span id='copyright-year' /></p>
+				</div>
 			</div>
-			<div class='content'>
-				<p style='margin-top: 0px;'>
-				Hello World
-				</p>
-			</div>
-		</div>
-		<div id='footer'>
-			<p class='email'><a href='mailto:mail@donny.nyc'>mail@donny.nyc</a></p>
 		</div>
 	</body>
+
+	<script>
+		window.onload = () => {
+			document.getElementById('copyright-year').innerHTML = new Date().getFullYear();
+		}
+	</script>
 </html>
+
