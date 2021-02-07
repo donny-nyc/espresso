@@ -44,8 +44,6 @@ struct http_request {
 	struct http_headers *headers;
 };
 
-struct http_request *string_to_request(char *req, size_t req_len);
-
 struct http_response {
 	int code;
 	size_t body_len;

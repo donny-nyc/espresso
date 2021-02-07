@@ -107,6 +107,14 @@ Accept: */*\r\n\
 	return PASS;
 }
 
+int test_malformed_string_parse() {
+	char *bad_request = "efneN39okGESSFKgKY9cCf$QTdr?koytdx#$x$asKahi6rhRdmNJn4d#K5f7g$AhTxSn?XmTAJKzsrcd";
+
+	string_to_request(bad_request, strlen(bad_request));
+
+	return PASS;
+}
+
 int main(int argc, char **argv) {
 	(void)argc;
 	(void)argv;
@@ -115,4 +123,5 @@ int main(int argc, char **argv) {
 	test_add_header();
 	test_free_request();
 	test_request_parse();
+	test_malformed_string_parse();
 }

@@ -13,6 +13,15 @@ request_test:
 test: request_test
 	test/request_test
 
+lexer:
+	gcc -Wall -O2 src/lexer.c -o build/lexer
+
+read_test:
+	gcc -Wall src/read_test.c -o test/read_test
+
+r_test: read_test
+	cat test/SampleTextFile_1000kb.txt | test/read_test
+
 clean:
 	rm -rf build/*
 	rm -rf test/*
