@@ -14,7 +14,7 @@ test: request_test
 	test/request_test
 
 lexer:
-	gcc -Wall -O2 src/lexer.c -o build/lexer
+	gcc -g -Wall -O2 src/lexer.c -o build/lexer
 
 read_test:
 	gcc -Wall src/read_test.c -o test/read_test

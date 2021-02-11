@@ -101,67 +101,42 @@ struct http_request {
 	struct entity_header **ent_headers;
 };
 
+struct msg_token_list {
+	unsigned int count;
+	struct msg_token *head;
+	struct msg_token *tail;
+};
 
-// <stdin.h>
-int test_getchar() {
-	time_t start, end;
-	char test_string[MAX_TEST_STRING];
+struct msg_token *new_token(int type, unsigned int *value, size_t val_len) {
+	struct msg_token *token = (struct msg_token *)malloc(sizeof(struct msg_token));
 
-	start = time(NULL);
-	char *c = test_string;
-	while((*c = getchar()) != EOF) {
-		if (c - test_string >= MAX_TEST_STRING) break;
-		c++;
+	if(type < 0) return NULL;
+
+	token->type = type;
+	token->value_len = val_len;
+	token->value = (unsigned int *)malloc(sizeof(char) * val_len);
+
+	strncpy(token->value, value, val_len);
+
+	return token;
+}
+
+int push_token(struct msg_token_list *list, struct msg_token *token) {
+	if(list == 0) return 0;
+
+	if(list->count == 0) {
+		list->head = token;
+		list->tail = token;
+
+		list->count++;
+	} else {
+		list->tail->next = token;
+		list->tail = list->tail->next;
+		
+		list->count++;
 	}
-	end = time(NULL);
 
-	printf("test getchar() -- %f\n", difftime(end, start));
-
-	return 0;
-}
-
-// <unistd.h.>
-// <errno.h>
-int test_read() {
-	time_t start, end;
-	char test_string[MAX_TEST_STRING];
-
-	start = time(NULL);
-	read(0, test_string, MAX_TEST_STRING);
-	end = time(NULL);
-
-	printf("test read() -- %f\n", difftime(end, start));
-
-	return 0;
-}
-
-/*
- * While there are remaining chars
- * 	while whitespace
- * 		status = SCANNING
- * 		continue;
- *
- * 	while alpha
- * 		status = READ_TOKEN
- *
- */
-const char *delimiters = " \t";
-const size_t delim_len = 2;
-
-int is_delim(char c) {
-	for(int i = 0; i < delim_len; i++) {
-		if(delimiters[i] == c) return 1;
-	}
-	return 0;
-}
-
-/*
- * ASCII charset - 'A' = 101 and 'z' = 172
- */
-int is_alpha(char c) {
-	if(c >= 'A' && c <= 'z') return 1;
-
-	return 0;
+	return list->count;
 }
 
 #define DEBUG 1
@@ -172,13 +147,11 @@ int is_alpha(char c) {
 #define NEW_TOKEN 3
 #define SCAN_WHITESPACE 4
 #define SCAN_VALUE 5
-#define SCAN_EOL 6
-
-/*
- * split `raw` on any value given in `delim.`
+#define SCAN_ASSIGNMENT 6
+#define SCAN_EOL 7 /* * split `raw` on any value given in `delim.`
  * Do not read past `raw_len`
  */
-struct msg_token *test_parse(char *raw, size_t raw_len) {
+struct msg_token *test_parse(char *raw, size_t raw_len, struct msg_token_list *list) {
 	unsigned int state = START;
 	struct msg_token *head = 0;
 	struct msg_token *last = 0;
@@ -193,12 +166,9 @@ struct msg_token *test_parse(char *raw, size_t raw_len) {
 			back = raw + i - 1;
 		}
 
-		if(DEBUG) {
-			printf("[debug] State,front,back: %d,%ld,%ld\n", state, front, back);
-		}
 		switch (state) {
 			case FIRST_SCAN:
-				if(raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n' || raw[i] == '\r'){
+				if(raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n' || raw[i] == '\r') {
 					state = SCAN_WHITESPACE;
 				} else {
 					state = SCAN_VALUE;
@@ -209,17 +179,30 @@ struct msg_token *test_parse(char *raw, size_t raw_len) {
 				if(raw[i] > 33 && raw[i] < 127) {
 					state = SCAN_VALUE;
 					front = raw + i;
+					back = front;
 				}
 				break;
-			case SCAN_VALUE:
-				if(raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n' || raw[i] == '\r'){
+			case SCAN_ASSIGNMENT:
 
+				break;
+			case SCAN_VALUE:
+				if(raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\n' || raw[i] == '\r') {
 					size_t val_len = 0;
-					if(front != 0 && back != 0 && front != back) {
+					if(front != 0 && back != 0) {
 						val_len = back - front + 1;
 					}
 
-					struct msg_token *new_token;
+					struct msg_token *token;
+
+					if(val_len > 0) {
+						token = new_token(1, (unsigned int *)front, val_len);
+
+						push_token(list, token);
+					}
+
+					front = raw + i;
+
+					/*
 					if(head == 0) {
 						state = FIRST_TOKEN;
 						head = (struct msg_token *)malloc(sizeof(struct msg_token));
@@ -236,12 +219,11 @@ struct msg_token *test_parse(char *raw, size_t raw_len) {
 
 					strncpy((char *)new_token->value, front, val_len);
 
-					printf("[debug] new_token->value: %s\n", (char *)new_token->value);
-
-					front = back = 0;
 
 					last = new_token;
 
+					*/
+					front = back = 0;
 					state = SCAN_WHITESPACE;
 				} else {
 					// must advance the rear so long as there
@@ -253,7 +235,15 @@ struct msg_token *test_parse(char *raw, size_t raw_len) {
 				if(front != 0 && back != 0 && front != back) {
 					size_t val_len = back - front + 1;
 
-					struct msg_token *new_token;
+					struct msg_token *token;
+
+					token = new_token(1, (unsigned int *)front, val_len);
+
+					push_token(list, token);
+
+					front = raw + i;
+
+					/*
 					if(head == 0) {
 						state = FIRST_TOKEN;
 						head = (struct msg_token *)malloc(sizeof(struct msg_token));
@@ -277,6 +267,7 @@ struct msg_token *test_parse(char *raw, size_t raw_len) {
 					}
 
 					front = back = 0;
+					*/
 				}
 				break;
 		}
@@ -288,46 +279,27 @@ int main(int argc, char **argv) {
 	(void) argc;
 	(void) argv;
 
-//	test_getchar();
-//	test_read();
-//	char *test_string = "Hello World!";
-//	test_parse(test_string, strlen(test_string));
+	char *sample_request = "GET / HTTP/1.1\r\n\
+Host: www.example.com\r\n\
+User-Agent: curl/7.69.1\r\n\
+Accept: */*\r\n\
+\r\n";
 
-	char *haystack = "\t";
+	struct msg_token_list *list = (struct msg_token_list *)malloc(sizeof(struct msg_token_list));
 
-	if(is_delim('\t')) {
-		printf("Pass\n");
-	} else {
-		printf("Fail\n");
-	}
+	struct msg_token *head = test_parse(sample_request,strlen(sample_request), list);
 
-	if(is_delim('s')) {
-		printf("Fail\n");
-	} else {
-		printf("Pass\n");
-	}
-
-	if(is_alpha('2')) {
-		printf("alpha test Fail\n");
-	} else {
-		printf("apha test Pass\n");
-	}
-
-	if(is_alpha('a')) {
-		printf("alpha test Pass\n");
-	} else {
-		printf("apha test Fail\n");
-	}
-
-	printf("'a' <= 'Z' :: %d\n", 'a' <= 'z');
-	printf("'a' >= 'a' :: %d\n", 'a' >= 'A');
-
-	char *test_string = "Hello Fine World!";
-
-	struct msg_token *head = test_parse(test_string,strlen(test_string));
-
+	/*
 	while(head != 0) {
 		printf("test_parse: %s\n", (char *)head->value);
+		head = head->next;
+	}
+	*/
+
+	head = list->head;
+
+	while(head != NULL) {
+		printf("[test] %lu : %s\n", head->value_len, (char *)head->value);
 		head = head->next;
 	}
 	return 0;
