@@ -148,13 +148,14 @@ int push_token(struct msg_token_list *list, struct msg_token *token) {
 #define SCAN_WHITESPACE 4
 #define SCAN_VALUE 5
 #define SCAN_ASSIGNMENT 6
-#define SCAN_EOL 7 /* * split `raw` on any value given in `delim.`
+#define SCAN_EOL 7 
+
+/* 
+ * split `raw` on any value given in `delim.`
  * Do not read past `raw_len`
  */
-struct msg_token *test_parse(char *raw, size_t raw_len, struct msg_token_list *list) {
+int test_parse(char *raw, size_t raw_len, struct msg_token_list *list) {
 	unsigned int state = START;
-	struct msg_token *head = 0;
-	struct msg_token *last = 0;
 
 	char *front = 0, *back = 0;
 
@@ -272,8 +273,15 @@ struct msg_token *test_parse(char *raw, size_t raw_len, struct msg_token_list *l
 				break;
 		}
 	}
-	return head;
+	return list->count;
 }
+
+struct assignment_token {
+	size_t name_len;
+	size_t value_len;
+	char *name;
+	char *value;
+};
 
 int main(int argc, char **argv) {
 	(void) argc;
@@ -287,16 +295,19 @@ Accept: */*\r\n\
 
 	struct msg_token_list *list = (struct msg_token_list *)malloc(sizeof(struct msg_token_list));
 
-	struct msg_token *head = test_parse(sample_request,strlen(sample_request), list);
+	int token_count = test_parse(sample_request,strlen(sample_request), list);
 
-	/*
-	while(head != 0) {
-		printf("test_parse: %s\n", (char *)head->value);
-		head = head->next;
-	}
-	*/
+	struct msg_token *head = list->head;
 
-	head = list->head;
+	struct msg_token assignment;
+
+	assignment.type = 2;
+	assignment.value = (unsigned int*)malloc(sizeof(struct assignment_token));
+	((struct assignment_token *)assignment.value)->name = "Host";
+	((struct assignment_token *)assignment.value)->value = "www.example.com";
+
+	printf("[test] : %s: %s\n", ((struct assignment_token *)assignment.value)->name, ((struct assignment_token *)assignment.value)->value);
+
 
 	while(head != NULL) {
 		printf("[test] %lu : %s\n", head->value_len, (char *)head->value);
