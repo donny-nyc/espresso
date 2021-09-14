@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 unsigned int SERV_PORT 	= 9090;
 unsigned int LISTEN_Q  	= 100;
@@ -114,64 +116,78 @@ int parse_request(char *request, char *path, size_t r_len, size_t p_len) {
 	return 0;
 }
 
-void str_echo(int sockfd) {
-	unsigned int status = 200;
+void str_echo(int sockfd, SSL_CTX *ctx) {
+	SSL *ssl = SSL_new(ctx);
+	SSL_set_fd(ssl, sockfd);
 
-	char request_buffer[10000];
-	ssize_t n;
-	read(sockfd, request_buffer, sizeof(request_buffer));
+	if(SSL_accept(ssl) <= 0) {
+		perror("ssl accept failed (?)");
+	} else {
+		unsigned int status = 200;
 
-	char path_buffer[10000];
-	parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
+		char request_buffer[10000];
+		ssize_t n;
+		read(sockfd, request_buffer, sizeof(request_buffer));
 
-	char path[10000];
+		char path_buffer[10000];
+		parse_request(request_buffer, path_buffer, sizeof(request_buffer), sizeof(path_buffer));
 
-	char *prefix = "public";
-	char *root = "public/";
-	snprintf(path, sizeof(path), "%s%s", prefix, path_buffer);
+		char path[10000];
 
-	// given an empty path, just return the index
-	if (strncmp(path, root, strlen(path)) == 0) {
-		bzero(path, sizeof(path));
-		strcpy(path, "public/index.html");
-		printf("%s <=> %s\n", path, root);
-	} 
+		char *prefix = "public";
+		char *root = "public/";
+		snprintf(path, sizeof(path), "%s%s", prefix, path_buffer);
 
-	// char body[10000];
-	// We're getting prolific - 10kb should have been enough for anybody,,
-	// but we just had to have more...
-	//
-	// Should make this configurable
-	char body[100000];
+		// given an empty path, just return the index
+		if (strncmp(path, root, strlen(path)) == 0) {
+			bzero(path, sizeof(path));
+			strcpy(path, "public/index.html");
+			printf("%s <=> %s\n", path, root);
+		} 
 
-	printf("path: %s\n", path);
+		// char body[10000];
+		// We're getting prolific - 10kb should have been enough for anybody,,
+		// but we just had to have more...
+		//
+		// Should make this configurable
+		char body[100000];
 
-	int body_fd;
-	if((body_fd = open(path, O_RDONLY)) == -1) { /* 404 Not Found */
-		status = 404;
-		if( (body_fd = open("public/404.html", O_RDONLY)) == -1) {
-				perror(strerror(errno));
-				exit(1);
+		printf("path: %s\n", path);
+
+		int body_fd;
+		if((body_fd = open(path, O_RDONLY)) == -1) { /* 404 Not Found */
+			status = 404;
+			if( (body_fd = open("public/404.html", O_RDONLY)) == -1) {
+					perror(strerror(errno));
+					exit(1);
+			}
 		}
-	}
 
-	build_response_body(body_fd, body, sizeof(body));
+		build_response_body(body_fd, body, sizeof(body));
 
-	char header_buf[1000];
-	if(build_http_header(header_buf, status, sizeof(header_buf), strlen(body)) == -1) {
-				perror("build_http_header");
-				exit(1);
-	}
+		char header_buf[1000];
+		if(build_http_header(header_buf, status, sizeof(header_buf), strlen(body)) == -1) {
+					perror("build_http_header");
+					exit(1);
+		}
 
-	if((write(sockfd, header_buf, strlen(header_buf))) == -1) {
-		perror(strerror(errno));
-		exit(1);
-	}
+		/*
+		if((write(sockfd, header_buf, strlen(header_buf))) == -1) {
+			perror(strerror(errno));
+			exit(1);
+		}
 
-	if((write(sockfd, body, strlen(body))) == -1) {
-		perror(strerror(errno));
-		exit(1);
+		if((write(sockfd, body, strlen(body))) == -1) {
+			perror(strerror(errno));
+			exit(1);
+		}
+		*/
+		SSL_write(ssl, header_buf, strlen(header_buf));
+		SSL_write(ssl, body, strlen(body));
 	}
+	SSL_shutdown(ssl);
+	SSL_free(ssl);
+	close(sockfd);
 }
 
 static void
@@ -192,10 +208,67 @@ sigchldHandler(int sig) {
 	errno = savedErrno;
 }
 
+void init_openssl() {
+	SSL_load_error_strings(); // registers the error strings for crypto functions
+	OpenSSL_add_ssl_algorithms(); // registers SSL/TLS ciphers and digests
+}
+
+void cleanup_openssl() {
+	EVP_cleanup();
+}
+
+SSL_CTX *create_context() {
+	const SSL_METHOD *method;
+	/* a struct with session details for a connection
+	 * https://www.openssl.org/docs/man1.1.1/man7/ssl.html
+	 */
+	SSL_CTX *ctx;
+
+	/*
+	 * generic - negotiates to the highest version supported
+	 * SSL_CTX_NEW(3)
+	 */
+	method = TLS_server_method();
+
+	ctx = SSL_CTX_new(method);
+	if (!ctx) {
+		perror("We couldn't create the SSL context");
+		ERR_print_errors_fp(stderr);
+		exit(1);
+	}
+
+	return ctx;
+}
+
+void configure_context(SSL_CTX *ctx) {
+	/* tells the server to choose the most appropriate curve for the client
+	 */
+	SSL_CTX_set_ecdh_auto(ctx, 1);
+
+	/* must configure the key and cert */	
+	// not clear if this is a relative path, or
+	// if we can provide some other path
+	if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0) {
+		ERR_print_errors_fp(stderr);
+		exit(1);
+	}
+
+	if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
+		ERR_print_errors_fp(stderr);
+		exit(1);
+	}
+}
+
 int main(int argc, char **argv) {
 	int listenfd, connfd;
 	pid_t childpid;
 	socklen_t clilen;
+	SSL_CTX *ctx;
+
+	init_openssl();
+	ctx = create_context();
+
+	configure_context(ctx);
 
 	struct sigaction sa;
 
@@ -254,7 +327,7 @@ int main(int argc, char **argv) {
 		if ( (childpid = fork()) == 0) { /* child process */
 			close(listenfd);	/* close listening socket */
 
-			str_echo(connfd);
+			str_echo(connfd, ctx);
 			exit(0);
 		}
 		close(connfd);	/* parent closes connected socket */
